@@ -1,0 +1,344 @@
+        processor 6502
+        include	"vcs.h"
+        include "macro.h"
+
+BORDERCOLOR	equ #$F0
+BORDERHEIGHT equ #7		    ; How many scan lines are our top and bottom borders
+BACKGROUNDCOLOR	equ #$32
+
+MIN_HPOS equ #33            ; Might not need this???
+;P0HEIGHT equ #8             ; The vertical length of the sprite in this example
+MAX_VPOS equ #192           ; The last scanline
+COLP0 equ #$0E				; player 0 sprite colour (white)
+
+    seg.u vars				; uninitialized segment
+    org	$80
+
+player0_x ds #MIN_HPOS		; byte variable to hold our horizontal position
+p0_y ds		 	            ; byte
+SpriteXPosition ds 1
+
+; ------------------------- Start of main segment ---------------------------------
+
+    seg	 main
+    org  $F000
+
+; ------------------------- Start of program execution ----------------------------
+
+reset: 	CLEAN_START
+
+	lda #%00000001			; (2) Set D0 to reflect the playfield
+	sta CTRLPF				; (3) Apply to the CTRLPF register
+
+	lda	#BORDERCOLOR		; (2)	
+	sta	COLUPF				; (3) Set the playfield color
+
+	lda #BACKGROUNDCOLOR    ;(2)
+	sta	COLUBK              ;(3)
+
+    lda	#COLP0				; (2)
+    sta	COLUP0				; (3) set the player 1 sprite colour
+
+    lda	#80				    ; (2) The scan line to start drawing the player 0 graphic
+    sta p0_y                ; (3) Store this scanline into this byte variable
+
+    stx player0_x			; (3)
+    jsr pos_x				; (6) set the initial course position of the player 0 graphic by jumping to the bottom
+
+    ;ldx #%11110000			; (2) set the horizontal movement player 0 (HMP0) register to adjust the position of
+    ;stx HMP0				; (3) the player graphic to the right by 1 color clock (only uses the 4 high bits)
+
+
+
+
+
+
+
+
+
+
+; --------------------------- Begin main loop -------------------------------------
+
+startframe:	VERTICAL_SYNC
+
+;--37 scanlines of vertical blank (8,436 color clocks, 2,812 machine cycles)-------
+                                ; THIS DOES THE TOP BORDER!!!
+	lda #%11111111				; (2) Solid line of pixels
+	sta PF0						; (3)Set them in all the PF# registers
+	sta PF1                     ; (3)
+	sta PF2	                    ; (3)
+
+	ldx #0 					    ; (2)
+	lda #0                      ; (2)
+lvblank:				
+    sta WSYNC                   ; (3)
+    inx                         ; (2)
+	cpx #37						; (2) 37 scanlines of vertical blank
+	bne lvblank
+		
+	lda #0						; (2) Start of new frame
+    sta WSYNC                   ; (3) Needed for HMOVE
+	sta VBLANK					; (3) End of vertical blank processing
+    ;sta HMOVE				    ; (3) horizontal move. this will move ALL the player, missle, and ball graphics at the same time
+                                ; HMOVE needs to execute during horizontal blanking so it should be done immediatly following
+                                ; a WSYNC. Additionally, any of the horizontal movement registers should not be modified within at least
+                                ; 24 machine cycles after an HMOVE.
+
+; --------------------------- 192 lines of drawfield ------------------------------
+
+    ldx #0					    ; (2)
+    ldy #0                      ; (2)
+drawfield:
+    cpx	#BORDERHEIGHT	 	    ; (2)
+	bpl	borderwalls0            ; (3/2) This will be skipped for the first 8 loops to make the top border listed above
+    cpx #192-BORDERHEIGHT		; (2) When on scanline 184, it is time to draw the bottom border (Only 8 scanlines left)
+	beq	borderbottom            ; (branch=3,skip=2) From scanline 184-192, draw the bottom border
+	jmp borderdone              ; (3) Once this is reached, we'll be able to skip through borderdone and go to "End of screen - enter blanking"
+
+borderbottom:  			
+    lda	#%11111111				; (2) Solid row of pixels for all PF# registers
+	sta PF0                     ; (3)
+	sta	PF1                     ; (3)
+	sta	PF2                     ; (3)
+
+borderdone:		                ;Keeps looping back to the necessary parts of the border of the border that need to be drawn 	                               
+	sta WSYNC                   ; (3) by tracking which scanline we're currently on
+    inx                         ; (2)
+    cpx #192                    ; (2)
+	bne drawfield               ; (3/2)
+    jmp finish                  ; (3)
+
+borderwalls0:                   ;This series of code draws the desired playfield for 8 scanlines in within a loop, 
+    lda #%01111111              ; (2) and then once out of the loop, the playfield is redifined before being drawn for another 8 scanline loop
+    sta PF2                     ; (3)
+borderwalls1:
+    sta WSYNC                   ; (3)
+    ;lda #%00000000
+    ;sta HMP0
+    inx                         ; (2)
+    cpx #16                     ; (2)
+    bne borderwalls1            ; (3/2) If the code branches, 10/22 horizontal blank machine cycles are used before WSYNC
+    lda #%00011111              ; (2) If the code doesn't branch, 14/22 are used
+    sta PF2                     ; (3)
+borderwalls2:
+    sta WSYNC                   ; (3)
+    inx
+    cpx #24
+    bne borderwalls2
+    lda #%00001111
+    sta PF2
+borderwalls3:
+    sta WSYNC
+    inx
+    cpx #32
+    bne borderwalls3
+    lda #%00000011
+    sta PF2
+borderwalls4:
+    sta WSYNC
+    inx
+    cpx #40
+    bne borderwalls4
+    lda #%00000000
+    sta PF2
+borderwalls5:
+    sta WSYNC
+    inx
+    cpx #48
+    bne borderwalls5
+    lda #%11111100
+    sta PF1
+borderwalls6:
+    sta WSYNC
+    inx
+    cpx #56
+    bne borderwalls6
+    lda #%11111000
+    sta PF1
+borderwalls7:
+    sta WSYNC
+    inx
+    cpx #64
+    bne borderwalls7
+    lda #%11100000
+    sta PF1
+borderwalls8:
+    sta WSYNC
+    inx
+    cpx #72
+    bne borderwalls8
+    lda #%11000000
+    sta PF1
+borderwalls9:
+    sta WSYNC
+    inx
+    cpx #80
+    bne borderwalls9
+    lda #%00000000
+    sta PF1
+borderwalls10:
+    sta WSYNC
+    inx
+    cpx #88
+    bne borderwalls10
+    lda #%00110000          ; Sets the widest width of the "circle" to be used in loop borderwalls11
+    sta PF0
+borderwalls11:              ; The widest segment horizontally of the "circular" playfield
+    sta WSYNC
+    lda player0,y           ; (2) Display player0
+    sta	GRP0				; (3) Write the byte retrieved from the graphics data
+    inx
+    iny
+    cpx #104
+    bne borderwalls11
+    ;lda #%00000000         ;Show this off, it's interesting lol
+    ;sta PF1                ;^^^
+    lda #%11110000
+    sta PF0
+    ldy #0
+    lda player0,y           ; (2) Turns off display of the sprite again by retrieving a blank line of player graphics
+    sta	GRP0				; (3) Write the byte retrieved from the graphics data
+borderwalls12:
+    sta WSYNC
+    ldy #0
+    lda player0,y           ; (2) Turns off display of the sprite again by retrieving a blank line of player graphics
+    sta	GRP0				; (3) Write the byte retrieved from the graphics data
+    inx
+    cpx #112
+    bne borderwalls12
+    lda #%11000000
+    sta PF1
+borderwalls13:
+    sta WSYNC
+    inx
+    cpx #120
+    bne borderwalls13
+    lda #%11100000
+    sta PF1
+borderwalls14:
+    sta WSYNC
+    inx
+    cpx #128
+    bne borderwalls14
+    lda #%11111000
+    sta PF1
+borderwalls15:
+    sta WSYNC
+    inx
+    cpx #136
+    bne borderwalls15
+    lda #%11111100
+    sta PF1
+borderwalls16:
+    sta WSYNC
+    inx
+    cpx #144
+    bne borderwalls16
+    lda #%00000000
+    sta PF2
+    lda #%11111111
+    sta PF1
+borderwalls17:
+    sta WSYNC
+    inx
+    cpx #152
+    bne borderwalls17
+    lda #%00000011
+    sta PF2
+borderwalls18:
+    sta WSYNC
+    inx
+    cpx #160
+    bne borderwalls18
+    lda #%00001111
+    sta PF2
+borderwalls19:
+    sta WSYNC
+    inx
+    cpx #168
+    bne borderwalls19
+    lda #%00011111
+    sta PF2
+borderwalls20:
+    sta WSYNC
+    inx
+    cpx #176
+    bne borderwalls20
+    lda #%01111111
+    sta PF2
+    jmp borderdone          ;Jump back up to borderdone once the playfield is complete in order to make the bottomborder                                 
+finish:                             
+
+; --------------------------- End of screen - enter blanking ----------------------
+
+    ldx #%01000010 				;Set D1 (start VBLANK), D6 (Enable INPT4, INPT5 latches) of vblank register
+    stx VBLANK				    
+
+; -------------------------- 30 scanlines of overscan -----------------------------
+
+	ldx #0					
+overscan:      			
+    sta WSYNC	
+    inx
+	cpx #30
+	bne overscan
+
+; --------------------------- End of overscan -------------------------------------
+
+	jmp startframe			    ; jump back up to start the next frame
+
+; --------------------------- Pad until end of main segment -----------------------
+
+Divide15									; The 6502/6507 has neither a multiplication nor a division instruction so here
+.POS	SET 0								; we're building a list of values for divisions of 15 and which course position
+        REPEAT 160
+            .byte (.POS / 15) + 1           ; To the best of my understanding, this creates a table of the 15 color cycle apart locations
+.POS	SET .POS + 1                        ; on the screen where we can set the course position. 
+        REPEND
+
+pos_x  						; (3) subroutine to position the sprite, the x register is currently holding 0 (?).
+    lda	Divide15,x			; (2) load the value location at the xth byte in the Divide15 table
+    tax						; (2) Transfer the accumulator to the x register
+    sta WSYNC
+
+; ---- this loop takes 5 machine cycles each iteration, that's 15 color clocks.
+
+    ldx #8
+SimpleLoop:		
+    dex						; (2) decrement x
+    bne SimpleLoop			; (2/3) branch if not equal
+    SLEEP 2
+    sta RESP0				; (3) strobe the RESP0 register to set the course position
+    rts						; (6) return to caller
+
+player0 		.byte %00000000
+                .byte %00001000
+                .byte %00110110
+                .byte %01100011				; Bitmap, one byte per line
+                .byte %01000001
+                .byte %00000000
+                .byte %00000000
+                .byte %00000000
+                .byte %00000000
+                .byte %00000000
+                .byte %00000000
+                .byte %00000000
+                .byte %00000000
+                .byte %00000000
+                .byte %00000000
+
+
+
+
+
+
+
+
+	org $FFFA
+	
+irqvectors:
+    .word reset          		; NMI
+	.word reset          		; RESET
+	.word reset          		; IRQ
+
+; -------------------------- End of main segment ----------------------------------
